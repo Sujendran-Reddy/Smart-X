@@ -1,7 +1,117 @@
 ﻿@page "/"
+@inject HttpClient Http
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Smart-X Gateway</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="container py-4">
+    <div class="mb-4">
+        <h1>Smart-X Gateway</h1>
+        <p class="text-secondary">
+            Monitor and manage telemetry from your hydroponic farm.
+        </p>
+    </div>
 
-Welcome to your new app.
+    <div class="alert @statusClass" role="status" aria-live="polite">
+        <strong>Gateway connection:</strong> @statusMessage
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-4">
+            <section class="card h-100 border-primary">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Sensor Data Ingestion and Telemetry</h2>
+                    <p class="text-secondary">
+                        Register sensors and monitor moisture, power consumption
+                        and valve states.
+                    </p>
+                    <button class="btn btn-primary mt-auto"
+                            disabled="@isChecking"
+                            @onclick="CheckConnectionAsync">
+                        @(isChecking ? "Checking..." : "Check gateway connection")
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <section class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Real-Time Command Stream and History</h2>
+                    <p class="text-secondary">
+                        Send device commands and review their execution history.
+                    </p>
+                    <button class="btn btn-outline-secondary mt-auto" disabled>
+                        Available in Part 2
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <section class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Network Topology and Mesh Routing</h2>
+                    <p class="text-secondary">
+                        Explore device connections and routing across the mesh.
+                    </p>
+                    <button class="btn btn-outline-secondary mt-auto" disabled>
+                        Available in the final PoE
+                    </button>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isChecking;
+    private string statusClass = "alert-info";
+    private string statusMessage = "Waiting to check the API.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckConnectionAsync();
+    }
+
+    private async Task CheckConnectionAsync()
+    {
+        if (isChecking)
+        {
+            return;
+        }
+
+        isChecking = true;
+        statusClass = "alert-info";
+        statusMessage = "Connecting to the API...";
+
+        try
+        {
+            using var response = await Http.GetAsync("api/health");
+
+            if (response.IsSuccessStatusCode)
+            {
+                statusClass = "alert-success";
+                statusMessage = "Connected. The API is responding.";
+            }
+            else
+            {
+                statusClass = "alert-warning";
+                statusMessage = $"The API returned HTTP {(int)response.StatusCode}. Try again.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            statusClass = "alert-danger";
+            statusMessage = "Cannot reach the API. Check that it is running, then try again.";
+        }
+        catch (OperationCanceledException)
+        {
+            statusClass = "alert-warning";
+            statusMessage = "The connection timed out. Try again.";
+        }
+        finally
+        {
+            isChecking = false;
+        }
+    }
+}
