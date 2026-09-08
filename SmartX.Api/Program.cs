@@ -1,8 +1,12 @@
 using SmartX.Shared.Models;
+using SmartX.Api.Endpoints;
+using SmartX.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+
+builder.Services.AddSingleton<SensorRegistry>();
 
 builder.Services.AddCors(options =>
 {
@@ -73,5 +77,7 @@ app.MapGet(
             isOverLimit = total > limit
         });
     });
+
+app.MapSensorEndpoints();
 
 app.Run();
