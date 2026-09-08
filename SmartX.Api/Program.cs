@@ -8,6 +8,12 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<SensorRegistry>();
 
+builder.Services.AddSingleton<TelemetryStore<float>>();
+
+builder.Services.AddSingleton<TelemetryStore<int>>();
+
+builder.Services.AddSingleton<TelemetryStore<bool>>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Dashboard", policy =>
@@ -79,5 +85,7 @@ app.MapGet(
     });
 
 app.MapSensorEndpoints();
+
+app.MapTelemetryEndpoints();
 
 app.Run();
