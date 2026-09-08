@@ -39,4 +39,34 @@ public sealed class TelemetryStore<T> where T : struct
                 : [];
         }
     }
+
+    public DailyTelemetryHistory<T> GetDailyHistory(Guid sensorId)
+    {
+        var snapshot = GetHistory(sensorId);
+
+        var days = snapshot
+            .GroupBy(packet => DateOnly.FromDateTime(
+                packet.RecordedAtUtc.UtcDateTime))
+            .OrderBy(group => group.Key)
+            .ToArray();
+
+        var dates = new DateOnly[days.Length];
+        var dailyReadings = new TelemetryPacket<T>[days.Length][];
+
+        for (var dayIndex = 0; dayIndex < days.Length; dayIndex++)
+        {
+            dates[dayIndex] = days[dayIndex].Key;
+
+            dailyReadings[dayIndex] = days[dayIndex]
+                .OrderBy(packet => packet.RecordedAtUtc)
+                .ToArray();
+        }
+
+        return new DailyTelemetryHistory<T>
+        {
+            SensorId = sensorId,
+            Dates = dates,
+            Readings = dailyReadings
+        };
+    }
 }

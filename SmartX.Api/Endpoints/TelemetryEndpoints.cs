@@ -78,6 +78,24 @@ public static class TelemetryEndpoints
 
             return Results.Ok(store.GetHistory(sensorId));
         });
+
+        group.MapGet("/daily", IResult (
+            Guid sensorId,
+            SensorRegistry registry,
+            TelemetryStore<T> store) =>
+        {
+            var sensorError = ValidateSensor(
+                registry,
+                sensorId,
+                expectedDataType);
+
+            if (sensorError is not null)
+            {
+                return sensorError;
+            }
+
+            return Results.Ok(store.GetDailyHistory(sensorId));
+        });
     }
 
     private static IResult? ValidateSensor(
