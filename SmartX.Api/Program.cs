@@ -8,6 +8,8 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<SensorRegistry>();
 
+builder.Services.AddSingleton<SensorAttachmentStore>();
+
 builder.Services.AddSingleton<TelemetryStore<float>>();
 
 builder.Services.AddSingleton<TelemetryStore<int>>();
@@ -87,5 +89,7 @@ app.MapGet(
 app.MapSensorEndpoints();
 
 app.MapTelemetryEndpoints();
+
+app.MapSensorAttachmentEndpoints();
 
 app.Run();
