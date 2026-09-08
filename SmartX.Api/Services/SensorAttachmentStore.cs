@@ -1,17 +1,27 @@
-﻿using SmartX.Shared.Models;
+﻿using Microsoft.AspNetCore.DataProtection;
+using SmartX.Shared.Models;
 
 namespace SmartX.Api.Services;
 
 public sealed class SensorAttachmentStore
 {
-    private readonly Dictionary<Guid, StoredAttachment> attachments = new();
+    private readonly Dictionary<Guid, EncryptedAttachment> attachments = new();
     private readonly object syncRoot = new();
+    private readonly IDataProtector protector;
+
+    public SensorAttachmentStore(IDataProtectionProvider provider)
+    {
+        protector = provider.CreateProtector(
+            "SmartX.SensorAttachments.v1");
+    }
 
     public SensorAttachment Add(
         Guid sensorId,
         string fileName,
         byte[] content)
     {
+        ArgumentNullException.ThrowIfNull(content);
+
         var metadata = new SensorAttachment
         {
             Id = Guid.NewGuid(),
@@ -21,11 +31,19 @@ public sealed class SensorAttachmentStore
             UploadedAtUtc = DateTimeOffset.UtcNow
         };
 
+        var fileProtector = CreateFileProtector(
+            sensorId,
+            metadata.Id);
+
+        var protectedContent = fileProtector.Protect(content);
+
         lock (syncRoot)
         {
             attachments.Add(
                 metadata.Id,
-                new StoredAttachment(metadata, content));
+                new EncryptedAttachment(
+                    metadata,
+                    protectedContent));
         }
 
         return metadata;
@@ -43,20 +61,46 @@ public sealed class SensorAttachmentStore
         }
     }
 
-    public StoredAttachment? GetById(Guid sensorId, Guid attachmentId)
+    public StoredAttachment? GetById(
+        Guid sensorId,
+        Guid attachmentId)
     {
+        EncryptedAttachment attachment;
+
         lock (syncRoot)
         {
-            if (!attachments.TryGetValue(attachmentId, out var attachment))
+            if (!attachments.TryGetValue(attachmentId, out var stored) ||
+                stored.Metadata.SensorId != sensorId)
             {
                 return null;
             }
 
-            return attachment.Metadata.SensorId == sensorId
-                ? attachment
-                : null;
+            attachment = stored;
         }
+
+        var fileProtector = CreateFileProtector(
+            sensorId,
+            attachmentId);
+
+        var content = fileProtector.Unprotect(
+            attachment.ProtectedContent);
+
+        return new StoredAttachment(
+            attachment.Metadata,
+            content);
     }
+
+    private IDataProtector CreateFileProtector(
+        Guid sensorId,
+        Guid attachmentId)
+    {
+        return protector.CreateProtector(
+            $"{sensorId:N}:{attachmentId:N}");
+    }
+
+    private sealed record EncryptedAttachment(
+        SensorAttachment Metadata,
+        byte[] ProtectedContent);
 
     public sealed record StoredAttachment(
         SensorAttachment Metadata,
