@@ -25,6 +25,8 @@ builder.Services.AddSingleton<TelemetryStore<bool>>();
 
 builder.Services.AddSingleton<DemoDataSeeder>();
 
+builder.Services.AddSingleton<MonitoringService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Dashboard", policy =>
@@ -104,5 +106,12 @@ app.MapSensorAttachmentEndpoints();
 app.MapDeploymentEndpoints();
 
 app.MapDemoEndpoints();
+
+app.MapGet(
+    "/api/monitoring",
+    (MonitoringService monitoring) =>
+    {
+        return Results.Ok(monitoring.GetSnapshot());
+    });
 
 app.Run();

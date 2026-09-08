@@ -5,6 +5,7 @@ namespace SmartX.Api.Services;
 public sealed class TelemetryStore<T> where T : struct
 {
     private readonly Dictionary<Guid, List<TelemetryPacket<T>>> readings = new();
+    private readonly Dictionary<Guid, TelemetryPacket<T>> latestReadings = new();
     private readonly object syncRoot = new();
 
     public TelemetryPacket<T> Add(Guid sensorId, T value)
@@ -25,8 +26,89 @@ public sealed class TelemetryStore<T> where T : struct
             }
 
             sensorReadings.Add(packet);
+            UpdateLatest(packet);
 
             return packet;
+        }
+    }
+
+    public int AddBatch(
+        Guid sensorId,
+        TelemetryPacket<T>[][] batches)
+    {
+        ArgumentNullException.ThrowIfNull(batches);
+
+        var totalReadings = 0;
+
+        foreach (var batch in batches)
+        {
+            ArgumentNullException.ThrowIfNull(batch);
+            totalReadings = checked(totalReadings + batch.Length);
+        }
+
+        var incoming = new List<TelemetryPacket<T>>(totalReadings);
+        TelemetryPacket<T>? newest = null;
+
+        foreach (var batch in batches)
+        {
+            foreach (var packet in batch)
+            {
+                if (packet is null)
+                {
+                    throw new ArgumentException(
+                        "A telemetry batch cannot contain null packets.",
+                        nameof(batches));
+                }
+
+                if (packet.SensorId != sensorId)
+                {
+                    throw new ArgumentException(
+                        "Every packet must belong to the target sensor.",
+                        nameof(batches));
+                }
+
+                if (packet.RecordedAtUtc == default)
+                {
+                    throw new ArgumentException(
+                        "Every packet must have a recording timestamp.",
+                        nameof(batches));
+                }
+
+                incoming.Add(packet);
+
+                if (newest is null ||
+                    packet.RecordedAtUtc >= newest.RecordedAtUtc)
+                {
+                    newest = packet;
+                }
+            }
+        }
+
+        lock (syncRoot)
+        {
+            if (!readings.TryGetValue(sensorId, out var sensorReadings))
+            {
+                readings.Add(sensorId, incoming);
+            }
+            else
+            {
+                sensorReadings.AddRange(incoming);
+            }
+
+            if (newest is not null)
+            {
+                UpdateLatest(newest);
+            }
+        }
+
+        return incoming.Count;
+    }
+
+    public TelemetryPacket<T>? GetLatest(Guid sensorId)
+    {
+        lock (syncRoot)
+        {
+            return latestReadings.GetValueOrDefault(sensorId);
         }
     }
 
@@ -70,63 +152,12 @@ public sealed class TelemetryStore<T> where T : struct
         };
     }
 
-    public int AddBatch(
-    Guid sensorId,
-    TelemetryPacket<T>[][] batches)
+    private void UpdateLatest(TelemetryPacket<T> packet)
     {
-        ArgumentNullException.ThrowIfNull(batches);
-
-        var totalReadings = 0;
-
-        foreach (var batch in batches)
+        if (!latestReadings.TryGetValue(packet.SensorId, out var current) ||
+            packet.RecordedAtUtc >= current.RecordedAtUtc)
         {
-            ArgumentNullException.ThrowIfNull(batch);
-            totalReadings = checked(totalReadings + batch.Length);
+            latestReadings[packet.SensorId] = packet;
         }
-
-        var incoming = new List<TelemetryPacket<T>>(totalReadings);
-
-        foreach (var batch in batches)
-        {
-            foreach (var packet in batch)
-            {
-                if (packet is null)
-                {
-                    throw new ArgumentException(
-                        "A telemetry batch cannot contain null packets.",
-                        nameof(batches));
-                }
-
-                if (packet.SensorId != sensorId)
-                {
-                    throw new ArgumentException(
-                        "Every packet must belong to the target sensor.",
-                        nameof(batches));
-                }
-
-                if (packet.RecordedAtUtc == default)
-                {
-                    throw new ArgumentException(
-                        "Every packet must have a recording timestamp.",
-                        nameof(batches));
-                }
-
-                incoming.Add(packet);
-            }
-        }
-
-        lock (syncRoot)
-        {
-            if (!readings.TryGetValue(sensorId, out var sensorReadings))
-            {
-                readings.Add(sensorId, incoming);
-            }
-            else
-            {
-                sensorReadings.AddRange(incoming);
-            }
-        }
-
-        return incoming.Count;
     }
 }
