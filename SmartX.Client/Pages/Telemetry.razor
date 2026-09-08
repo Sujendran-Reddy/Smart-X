@@ -1,0 +1,381 @@
+﻿@page "/sensors/{SensorId:guid}/telemetry"
+@using System.Globalization
+@using SmartX.Shared.Models
+@using SmartX.Shared.Requests
+@inject HttpClient Http
+
+<PageTitle>Sensor Telemetry | Smart-X</PageTitle>
+
+<div class="container py-4">
+    <a href="sensors" class="btn btn-outline-secondary mb-3">
+        Back to sensors
+    </a>
+
+    <h1>Sensor Telemetry</h1>
+
+    @if (isLoadingSensor)
+    {
+        <p role="status">Loading sensor...</p>
+    }
+    else if (sensor is null)
+    {
+        <div class="alert alert-danger" role="alert">
+            @sensorError
+        </div>
+    }
+    else
+    {
+        <p class="text-secondary">
+            <strong>@sensor.DeviceIdentifier</strong>
+            · @sensor.DeploymentLocation
+            · @sensor.DataType readings
+        </p>
+
+        <section class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Submit a reading</h2>
+
+                @if (!string.IsNullOrWhiteSpace(submitMessage))
+                {
+                    <div class="alert @submitMessageClass" role="status">
+                        @submitMessage
+                    </div>
+                }
+
+                <form @onsubmit="SubmitAsync" @onsubmit:preventDefault>
+                    <fieldset disabled="@isSaving">
+                        <div class="mb-3">
+                            <label for="readingValue" class="form-label">
+                                Reading value
+                            </label>
+
+                            @switch (sensor.DataType)
+                            {
+                                case TelemetryDataType.Float:
+                                    <input id="readingValue"
+                                           type="number"
+                                           class="form-control"
+                                           step="any"
+                                           required
+                                           @bind="floatValue" />
+                                    break;
+
+                                case TelemetryDataType.Integer:
+                                    <input id="readingValue"
+                                           type="number"
+                                           class="form-control"
+                                           step="1"
+                                           min="-2147483648"
+                                           max="2147483647"
+                                           required
+                                           @bind="integerValue" />
+                                    break;
+
+                                case TelemetryDataType.Boolean:
+                                    <select id="readingValue"
+                                            class="form-select"
+                                            required
+                                            @bind="booleanValue">
+                                        <option value="">Select a state</option>
+                                        <option value="true">True</option>
+                                        <option value="false">False</option>
+                                    </select>
+                                    break;
+                            }
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            @(isSaving ? "Submitting..." : "Submit reading")
+                        </button>
+                    </fieldset>
+                </form>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h2 class="h5 mb-0">Reading history (@history.Length)</h2>
+                    <button type="button"
+                            class="btn btn-outline-primary"
+                            disabled="@(isLoadingHistory || isSaving)"
+                            @onclick="LoadHistoryAsync">
+                        @(isLoadingHistory ? "Loading..." : "Refresh history")
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(historyError))
+                {
+                    <div class="alert alert-warning" role="alert">
+                        @historyError
+                    </div>
+                }
+
+                @if (isLoadingHistory)
+                {
+                    <p role="status">Loading telemetry history...</p>
+                }
+                else if (history.Length == 0 && string.IsNullOrWhiteSpace(historyError))
+                {
+                    <p class="text-secondary mb-0">
+                        No readings yet. Submit the first reading above.
+                    </p>
+                }
+
+                @if (history.Length > 0)
+                {
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <caption>Telemetry readings, newest first.</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Value</th>
+                                    <th scope="col">Recorded (UTC)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var reading in history)
+                                {
+                                    <tr>
+                                        <td>@reading.Value</td>
+                                        <td>@reading.RecordedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid SensorId { get; set; }
+
+    private SensorProfile? sensor;
+    private HistoryRow[] history = [];
+    private float? floatValue;
+    private int? integerValue;
+    private string? booleanValue;
+    private bool isLoadingSensor;
+    private bool isLoadingHistory;
+    private bool isSaving;
+    private string? sensorError;
+    private string? historyError;
+    private string? submitMessage;
+    private string submitMessageClass = "alert-info";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoadingSensor = true;
+        sensor = null;
+        history = [];
+        sensorError = null;
+        historyError = null;
+        submitMessage = null;
+        floatValue = null;
+        integerValue = null;
+        booleanValue = null;
+
+        try
+        {
+            sensor = await Http.GetFromJsonAsync<SensorProfile>(
+                $"api/sensors/{SensorId}");
+
+            if (sensor is null)
+            {
+                sensorError = "The API returned no sensor details.";
+                return;
+            }
+
+            await LoadHistoryAsync();
+        }
+        catch (HttpRequestException exception)
+        {
+            sensorError = exception.StatusCode == System.Net.HttpStatusCode.NotFound
+                ? "This sensor no longer exists. Return to the sensor list and refresh it."
+                : "Could not load the sensor. Check that the API is running and reload this page.";
+        }
+        catch (OperationCanceledException)
+        {
+            sensorError = "Loading the sensor timed out. Reload this page to try again.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            sensorError = "The API returned unreadable sensor details.";
+        }
+        finally
+        {
+            isLoadingSensor = false;
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        if (sensor is null || isLoadingHistory)
+        {
+            return;
+        }
+
+        isLoadingHistory = true;
+        historyError = null;
+
+        try
+        {
+            history = sensor.DataType switch
+            {
+                TelemetryDataType.Float => await ReadHistoryAsync<float>("float"),
+                TelemetryDataType.Integer => await ReadHistoryAsync<int>("integer"),
+                TelemetryDataType.Boolean => await ReadHistoryAsync<bool>("boolean"),
+                _ => throw new InvalidOperationException("Unsupported telemetry data type.")
+            };
+        }
+        catch (HttpRequestException exception)
+        {
+            historyError = exception.StatusCode == System.Net.HttpStatusCode.NotFound
+                ? "This sensor no longer exists. Return to the sensor list and refresh it."
+                : "Could not refresh history. Check the API connection. Any displayed readings may be out of date.";
+        }
+        catch (OperationCanceledException)
+        {
+            historyError = "Loading history timed out. Try refreshing again.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            historyError = "The API returned unreadable telemetry history.";
+        }
+        finally
+        {
+            isLoadingHistory = false;
+        }
+    }
+
+    private async Task<HistoryRow[]> ReadHistoryAsync<T>(
+        string route) where T : struct
+    {
+        var packets = await Http.GetFromJsonAsync<TelemetryPacket<T>[]>(
+            $"api/sensors/{SensorId}/telemetry/{route}") ?? [];
+
+        return packets
+            .Reverse()
+            .Select(packet => new HistoryRow(
+                Convert.ToString(packet.Value, CultureInfo.InvariantCulture) ?? string.Empty,
+                packet.RecordedAtUtc))
+            .ToArray();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (sensor is null || isSaving)
+        {
+            return;
+        }
+
+        isSaving = true;
+        submitMessage = null;
+        submitMessageClass = "alert-danger";
+
+        try
+        {
+            bool saved;
+
+            switch (sensor.DataType)
+            {
+                case TelemetryDataType.Float:
+                    if (!floatValue.HasValue || !float.IsFinite(floatValue.Value))
+                    {
+                        submitMessage = "Enter a finite numeric reading.";
+                        return;
+                    }
+
+                    saved = await SendReadingAsync("float", floatValue.Value);
+                    break;
+
+                case TelemetryDataType.Integer:
+                    if (!integerValue.HasValue)
+                    {
+                        submitMessage = "Enter a whole-number reading.";
+                        return;
+                    }
+
+                    saved = await SendReadingAsync("integer", integerValue.Value);
+                    break;
+
+                case TelemetryDataType.Boolean:
+                if (!bool.TryParse(booleanValue, out var parsedBoolean))
+                {
+                    submitMessage = "Select True or False.";
+                    return;
+                }
+
+    saved = await SendReadingAsync("boolean", parsedBoolean);
+    break;
+
+                default:
+                    submitMessage = "This telemetry data type is unsupported.";
+                    return;
+            }
+
+            if (!saved)
+            {
+                return;
+            }
+
+            submitMessageClass = "alert-success";
+            submitMessage = "Reading saved successfully.";
+            floatValue = null;
+            integerValue = null;
+            booleanValue = null;
+
+            await LoadHistoryAsync();
+        }
+        catch (HttpRequestException)
+        {
+            submitMessage = "Could not confirm submission. Check the API connection and refresh history before retrying.";
+        }
+        catch (OperationCanceledException)
+        {
+            submitMessage = "Submission timed out. Refresh history before retrying to check whether the reading was saved.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task<bool> SendReadingAsync<T>(
+        string route,
+        T value) where T : struct
+    {
+        var request = new SubmitTelemetryRequest<T>
+        {
+            Value = value
+        };
+
+        using var response = await Http.PostAsJsonAsync(
+            $"api/sensors/{SensorId}/telemetry/{route}",
+            request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        submitMessage = response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.NotFound =>
+                "This sensor no longer exists. Return to the sensor list and refresh it.",
+            System.Net.HttpStatusCode.BadRequest =>
+                "The API rejected this reading. Check its value and the sensor's registered data type.",
+            _ => $"Submission failed with HTTP {(int)response.StatusCode}. Try again."
+        };
+
+        return false;
+    }
+
+    private sealed record HistoryRow(
+        string Value,
+        DateTimeOffset RecordedAtUtc);
+}

@@ -139,6 +139,7 @@
                                 <th scope="col">Category</th>
                                 <th scope="col">Data type</th>
                                 <th scope="col">Registered (UTC)</th>
+                                <th scope="col">Telemetry</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -150,6 +151,12 @@
                                     <td>@CategoryLabel(sensor.Category)</td>
                                     <td>@sensor.DataType</td>
                                     <td>@sensor.RegisteredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           href="@($"sensors/{sensor.Id}/telemetry")">
+                                            View telemetry
+                                        </a>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
