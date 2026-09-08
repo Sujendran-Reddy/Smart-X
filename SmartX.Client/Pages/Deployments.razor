@@ -1,0 +1,388 @@
+﻿@page "/deployments"
+@using System.ComponentModel.DataAnnotations
+@using SmartX.Shared.Models
+@inject HttpClient Http
+
+<PageTitle>Deployment Validation | Smart-X</PageTitle>
+
+<div class="container py-4">
+    <h1>Deployment Validation</h1>
+    <p class="text-secondary">
+        Check a sensor's proposed location within a facility and its nested zones.
+        Validation does not save or change the sensor's registered location.
+    </p>
+
+    <section class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h2 class="h5 mb-0">Configure a deployment</h2>
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        disabled="@(isLoading || isValidating)"
+                        @onclick="LoadSensorsAsync">
+                    @(isLoading ? "Loading..." : "Refresh sensors")
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="alert alert-warning" role="alert">
+                    @loadError
+                </div>
+            }
+
+            @if (!isLoading && sensors.Length == 0 && string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="alert alert-info">
+                    Register a sensor before validating its deployment.
+                    <a href="sensors">Open sensor registration</a>.
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(requestError))
+            {
+                <div class="alert alert-danger" role="alert">
+                    @requestError
+                </div>
+            }
+
+            <EditForm Model="@form" OnValidSubmit="ValidateAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <fieldset disabled="@(isLoading || isValidating)">
+                    <div class="mb-3">
+                        <label for="facilityName" class="form-label">
+                            Facility name
+                        </label>
+                        <InputText id="facilityName"
+                                   class="form-control"
+                                   maxlength="100"
+                                   @bind-Value="form.FacilityName"
+                                   @bind-Value:after="ClearResult" />
+                        <ValidationMessage For="@(() => form.FacilityName)" />
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <InputCheckbox id="facilityEnabled"
+                                       class="form-check-input"
+                                       @bind-Value="form.FacilityEnabled"
+                                       @bind-Value:after="ClearResult" />
+                        <label for="facilityEnabled" class="form-check-label">
+                            Facility enabled
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="zoneNames" class="form-label">
+                            Nested zones
+                        </label>
+                        <InputTextArea id="zoneNames"
+                                       class="form-control"
+                                       rows="4"
+                                       maxlength="6300"
+                                       aria-describedby="zoneHelp"
+                                       @bind-Value="form.ZoneNames"
+                                       @bind-Value:after="ClearResult" />
+                        <div id="zoneHelp" class="form-text">
+                            Enter one zone per line, from outermost to innermost.
+                            Each line becomes a child of the previous zone.
+                            Use up to 62 zones, with at most 100 characters per name.
+                        </div>
+                        <ValidationMessage For="@(() => form.ZoneNames)" />
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <InputCheckbox id="deepestZoneEnabled"
+                                       class="form-check-input"
+                                       @bind-Value="form.DeepestZoneEnabled"
+                                       @bind-Value:after="ClearResult" />
+                        <label for="deepestZoneEnabled" class="form-check-label">
+                            Innermost zone enabled
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="deploymentSensor" class="form-label">
+                            Registered sensor
+                        </label>
+                        <InputSelect id="deploymentSensor"
+                                     class="form-select"
+                                     @bind-Value="form.SensorId"
+                                     @bind-Value:after="ClearResult">
+                            <option value="">Select a sensor</option>
+                            @foreach (var sensor in sensors)
+                            {
+                                <option value="@sensor.Id">
+                                    @sensor.DeviceIdentifier — @sensor.DeploymentLocation
+                                </option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => form.SensorId)" />
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <InputCheckbox id="deploymentSensorEnabled"
+                                       class="form-check-input"
+                                       @bind-Value="form.SensorEnabled"
+                                       @bind-Value:after="ClearResult" />
+                        <label for="deploymentSensorEnabled" class="form-check-label">
+                            Sensor enabled
+                        </label>
+                    </div>
+
+                    <button type="submit"
+                            class="btn btn-primary"
+                            disabled="@(sensors.Length == 0)">
+                        @(isValidating ? "Validating..." : "Validate deployment")
+                    </button>
+                </fieldset>
+            </EditForm>
+        </div>
+    </section>
+
+    @if (result is not null)
+    {
+        <section class="card">
+            <div class="card-body">
+                <h2 class="h5">Validation result</h2>
+
+                <div class="alert @(result.IsValid ? "alert-success" : "alert-danger")"
+                     role="status">
+                    @(result.IsValid
+                        ? "The proposed deployment passed validation."
+                        : "The proposed deployment failed validation.")
+                </div>
+
+                <p class="text-break">
+                    <strong>Deployment path:</strong> @validatedPath
+                </p>
+
+                <dl class="row">
+                    <dt class="col-sm-4">Nodes visited</dt>
+                    <dd class="col-sm-8">@result.NodesVisited</dd>
+
+                    <dt class="col-sm-4">Depth reached</dt>
+                    <dd class="col-sm-8">@result.MaxDepthReached</dd>
+
+                    <dt class="col-sm-4">Errors</dt>
+                    <dd class="col-sm-8">@result.Errors.Count</dd>
+                </dl>
+
+                @if (!result.IsValid)
+                {
+                    <ul class="mb-0">
+                        @foreach (var error in result.Errors)
+                        {
+                            <li class="text-break">@error</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private readonly DeploymentForm form = new();
+    private SensorProfile[] sensors = [];
+    private DeploymentValidationResult? result;
+    private bool isLoading;
+    private bool isValidating;
+    private string? loadError;
+    private string? requestError;
+    private string validatedPath = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSensorsAsync();
+    }
+
+    private void ClearResult()
+    {
+        result = null;
+        requestError = null;
+        validatedPath = string.Empty;
+    }
+
+    private async Task LoadSensorsAsync()
+    {
+        if (isLoading || isValidating)
+        {
+            return;
+        }
+
+        isLoading = true;
+        loadError = null;
+        ClearResult();
+
+        try
+        {
+            sensors = await Http.GetFromJsonAsync<SensorProfile[]>(
+                "api/sensors") ?? [];
+
+            if (!sensors.Any(sensor => sensor.Id == form.SensorId))
+            {
+                form.SensorId = null;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            loadError = "Could not refresh sensors. Check the API connection. Any displayed options may be out of date.";
+        }
+        catch (OperationCanceledException)
+        {
+            loadError = "Loading sensors timed out. Try refreshing again.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            loadError = "The API returned an unreadable sensor list.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ValidateAsync()
+    {
+        if (isValidating || isLoading)
+        {
+            return;
+        }
+
+        ClearResult();
+
+        var selectedSensor = sensors.FirstOrDefault(
+            sensor => sensor.Id == form.SensorId);
+
+        if (selectedSensor is null)
+        {
+            requestError = "Select a registered sensor. Refresh the sensor list if needed.";
+            return;
+        }
+
+        var zoneNames = form.ZoneNames
+            .Split('\n', StringSplitOptions.TrimEntries |
+                StringSplitOptions.RemoveEmptyEntries);
+
+        if (zoneNames.Length == 0 || zoneNames.Length > 62)
+        {
+            requestError = "Enter between 1 and 62 nested zones.";
+            return;
+        }
+
+        if (zoneNames.Any(name => name.Length > 100))
+        {
+            requestError = "Each zone name must be 100 characters or fewer.";
+            return;
+        }
+
+        var root = new DeploymentNode
+        {
+            Name = form.FacilityName.Trim(),
+            IsEnabled = form.FacilityEnabled
+        };
+
+        var parent = root;
+
+        foreach (var zoneName in zoneNames)
+        {
+            var zone = new DeploymentNode
+            {
+                Name = zoneName,
+                IsEnabled = true
+            };
+
+            parent.Children.Add(zone);
+            parent = zone;
+        }
+
+        parent.IsEnabled = form.DeepestZoneEnabled;
+
+        parent.Children.Add(new DeploymentNode
+        {
+            Name = selectedSensor.DeviceIdentifier,
+            IsEnabled = form.SensorEnabled,
+            SensorId = selectedSensor.Id
+        });
+
+        isValidating = true;
+
+        try
+        {
+            using var response = await Http.PostAsJsonAsync(
+                "api/deployments/validate",
+                root,
+                new System.Text.Json.JsonSerializerOptions(
+                    System.Text.Json.JsonSerializerDefaults.Web)
+                {
+                    MaxDepth = 256
+                });
+
+            if (!response.IsSuccessStatusCode &&
+                response.StatusCode != System.Net.HttpStatusCode.BadRequest)
+            {
+                requestError = $"Validation could not complete. The API returned HTTP {(int)response.StatusCode}.";
+                return;
+            }
+
+            var validation = await response.Content
+                .ReadFromJsonAsync<DeploymentValidationResult>();
+
+            if (validation is null ||
+                validation.Errors is null ||
+                validation.NodesVisited < 1 ||
+                validation.MaxDepthReached < 1 ||
+                response.IsSuccessStatusCode != validation.IsValid)
+            {
+                requestError = "The API returned an unexpected validation response.";
+                return;
+            }
+
+            result = validation;
+
+            validatedPath = string.Join(
+                " → ",
+                new[] { root.Name }
+                    .Concat(zoneNames)
+                    .Append(selectedSensor.DeviceIdentifier));
+        }
+        catch (HttpRequestException)
+        {
+            requestError = "Could not validate the deployment. Check that the API is running.";
+        }
+        catch (OperationCanceledException)
+        {
+            requestError = "Deployment validation timed out. Try again.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            requestError = "The API returned an unreadable validation response.";
+        }
+        finally
+        {
+            isValidating = false;
+        }
+    }
+
+    public sealed class DeploymentForm
+    {
+        [Required(ErrorMessage = "Enter a facility name.")]
+        [StringLength(100, ErrorMessage = "The facility name cannot exceed 100 characters.")]
+        public string FacilityName { get; set; } = "Facility A";
+
+        [Required(ErrorMessage = "Enter at least one zone.")]
+        [StringLength(6300, ErrorMessage = "The zone list is too long.")]
+        public string ZoneNames { get; set; } = "Zone 1\nGreenhouse A";
+
+        [Required(ErrorMessage = "Select a registered sensor.")]
+        public Guid? SensorId { get; set; }
+
+        public bool FacilityEnabled { get; set; } = true;
+
+        public bool DeepestZoneEnabled { get; set; } = true;
+
+        public bool SensorEnabled { get; set; } = true;
+    }
+}
