@@ -8,6 +8,13 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<SensorRegistry>();
 
+builder.Services.AddSingleton<DeploymentValidator>();
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.MaxDepth = 256;
+});
+
 builder.Services.AddSingleton<SensorAttachmentStore>();
 
 builder.Services.AddSingleton<TelemetryStore<float>>();
@@ -91,5 +98,7 @@ app.MapSensorEndpoints();
 app.MapTelemetryEndpoints();
 
 app.MapSensorAttachmentEndpoints();
+
+app.MapDeploymentEndpoints();
 
 app.Run();
