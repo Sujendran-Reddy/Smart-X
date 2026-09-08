@@ -97,6 +97,9 @@
         </div>
     </section>
 
+        <DemoDataPanel IsBusy="@(isLoading || isSaving)"
+                   OnLoaded="LoadSensorsAsync" />
+
     <SensorDirectory Sensors="@sensors"
                      IsLoading="@isLoading"
                      IsBusy="@isSaving"

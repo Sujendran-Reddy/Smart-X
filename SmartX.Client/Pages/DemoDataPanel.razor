@@ -1,0 +1,123 @@
+﻿@using SmartX.Shared.Models
+@inject HttpClient Http
+
+<section class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Simulation data</h2>
+
+        <p class="text-secondary">
+            Load 1,000 simulated sensors with seven days of historical readings.
+            Loading again during the same API session does not add duplicates.
+            Restarting the API clears the simulation data.
+        </p>
+
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <div class="alert @messageClass" role="status">
+                @message
+            </div>
+        }
+
+        <button type="button"
+                class="btn btn-outline-primary"
+                disabled="@(isLoading || IsBusy)"
+                @onclick="LoadDemoDataAsync">
+            @(isLoading ? "Loading demo data..." : "Load demo data")
+        </button>
+
+        @if (result is not null)
+        {
+            <dl class="row mt-3 mb-0">
+                <dt class="col-sm-4">Simulated sensors</dt>
+                <dd class="col-sm-8">@result.SensorsCreated.ToString("N0")</dd>
+
+                <dt class="col-sm-4">Historical readings</dt>
+                <dd class="col-sm-8">@result.ReadingsCreated.ToString("N0")</dd>
+
+                <dt class="col-sm-4">Days per sensor</dt>
+                <dd class="col-sm-8">@result.DaysPerSensor</dd>
+
+                <dt class="col-sm-4">Original load time</dt>
+                <dd class="col-sm-8">@result.ElapsedMilliseconds ms</dd>
+            </dl>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public EventCallback OnLoaded { get; set; }
+
+    private bool isLoading;
+    private DemoSeedResult? result;
+    private string? message;
+    private string messageClass = "alert-info";
+
+    private async Task LoadDemoDataAsync()
+    {
+        if (isLoading || IsBusy)
+        {
+            return;
+        }
+
+        isLoading = true;
+        result = null;
+        message = null;
+        messageClass = "alert-danger";
+
+        try
+        {
+            using var response = await Http.PostAsync(
+                "api/demo/seed",
+                null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                message = response.StatusCode == System.Net.HttpStatusCode.NotFound
+                    ? "Demo loading is unavailable. Start the API using its Development launch profile."
+                    : $"Demo loading failed with HTTP {(int)response.StatusCode}.";
+
+                return;
+            }
+
+            var seedResult = await response.Content
+                .ReadFromJsonAsync<DemoSeedResult>();
+
+            if (seedResult is null)
+            {
+                message = "The API returned no demo-loading result.";
+                return;
+            }
+
+            result = seedResult;
+            messageClass = "alert-success";
+            message = "Demo data is available. The sensor list is being refreshed.";
+
+            await OnLoaded.InvokeAsync();
+
+            message = "Demo data is available. Check the sensor list below.";
+        }
+        catch (HttpRequestException)
+        {
+            messageClass = "alert-danger";
+            message = "Could not confirm demo loading. Check the API connection and try again. Repeating the request does not duplicate a completed load.";
+        }
+        catch (OperationCanceledException)
+        {
+            messageClass = "alert-warning";
+            message = "Demo loading timed out. Try again to check the result. A completed load will not be duplicated.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            messageClass = "alert-danger";
+            message = "The API returned an unreadable demo-loading result.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
