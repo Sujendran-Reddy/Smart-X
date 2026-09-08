@@ -1,0 +1,449 @@
+﻿@page "/monitoring"
+@using SmartX.Shared.Models
+@implements IAsyncDisposable
+@inject HttpClient Http
+
+<PageTitle>Live Monitoring | Smart-X</PageTitle>
+
+<div class="container py-4">
+    <h1>Live Monitoring</h1>
+    <p class="text-secondary">
+        Spot unusual readings and sensors that have stopped reporting.
+        A stale reading does not confirm a hardware disconnection.
+    </p>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div class="form-check">
+            <input id="autoRefresh"
+                   type="checkbox"
+                   class="form-check-input"
+                   @bind="autoRefresh" />
+            <label for="autoRefresh" class="form-check-label">
+                Refresh automatically every 5 seconds
+            </label>
+        </div>
+
+        <button type="button"
+                class="btn btn-outline-primary"
+                disabled="@isLoading"
+                @onclick="LoadSnapshotAsync">
+            @(isLoading ? "Refreshing..." : "Refresh now")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @errorMessage
+        </div>
+    }
+
+    @if (snapshot is null)
+    {
+        @if (isLoading)
+        {
+            <p role="status">Loading monitoring data...</p>
+        }
+    }
+    else
+    {
+        <p class="text-secondary">
+            Last successful check (UTC):
+            @snapshot.CheckedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+            @if (!autoRefresh)
+            {
+                <span> · Automatic refresh paused</span>
+            }
+        </p>
+
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-lg">
+                <button type="button"
+                        class="btn btn-outline-primary w-100 h-100 p-3"
+                        aria-pressed="@(selectedState == "")"
+                        @onclick="() => SelectState(string.Empty)">
+                    <span class="d-block">All sensors</span>
+                    <strong class="fs-3">@snapshot.TotalSensors</strong>
+                </button>
+            </div>
+
+            <div class="col-6 col-lg">
+                <button type="button"
+                        class="btn btn-outline-success w-100 h-100 p-3"
+                        aria-pressed="@(selectedState == "Normal")"
+                        @onclick='() => SelectState("Normal")'>
+                    <span class="d-block">Normal</span>
+                    <strong class="fs-3">@snapshot.NormalCount</strong>
+                </button>
+            </div>
+
+            <div class="col-6 col-lg">
+                <button type="button"
+                        class="btn btn-outline-danger w-100 h-100 p-3"
+                        aria-pressed="@(selectedState == "Warning")"
+                        @onclick='() => SelectState("Warning")'>
+                    <span class="d-block">Warnings</span>
+                    <strong class="fs-3">@snapshot.WarningCount</strong>
+                </button>
+            </div>
+
+            <div class="col-6 col-lg">
+                <button type="button"
+                        class="btn btn-outline-warning text-dark w-100 h-100 p-3"
+                        aria-pressed="@(selectedState == "Stale")"
+                        @onclick='() => SelectState("Stale")'>
+                    <span class="d-block">Stale</span>
+                    <strong class="fs-3">@snapshot.StaleCount</strong>
+                </button>
+            </div>
+
+            <div class="col-6 col-lg">
+                <button type="button"
+                        class="btn btn-outline-secondary w-100 h-100 p-3"
+                        aria-pressed="@(selectedState == "No data")"
+                        @onclick='() => SelectState("No data")'>
+                    <span class="d-block">No data</span>
+                    <strong class="fs-3">@snapshot.NoDataCount</strong>
+                </button>
+            </div>
+        </div>
+
+        <section class="card">
+            <div class="card-body">
+                <h2 class="h5">Sensor status</h2>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-12 col-md-8">
+                        <label for="monitorSearch" class="form-label">
+                            Search devices or locations
+                        </label>
+                        <input id="monitorSearch"
+                               type="search"
+                               class="form-control"
+                               @bind="searchText"
+                               @bind:event="oninput"
+                               @bind:after="FilterChanged" />
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label for="monitorState" class="form-label">
+                            State
+                        </label>
+                        <select id="monitorState"
+                                class="form-select"
+                                @bind="selectedState"
+                                @bind:after="FilterChanged">
+                            <option value="">All states</option>
+                            <option value="Normal">Normal</option>
+                            <option value="Warning">Warning</option>
+                            <option value="Stale">Stale</option>
+                            <option value="No data">No data</option>
+                        </select>
+                    </div>
+                </div>
+
+                @if (snapshot.TotalSensors == 0)
+                {
+                    <p class="text-secondary mb-0">
+                        No sensors registered.
+                        <a href="sensors">Register a sensor</a> to begin monitoring.
+                    </p>
+                }
+                else if (filteredSensors.Length == 0)
+                {
+                    <p class="text-secondary">
+                        No sensors match these filters.
+                    </p>
+                    <button type="button"
+                            class="btn btn-outline-primary"
+                            @onclick="ClearFilters">
+                        Clear filters
+                    </button>
+                }
+                else
+                {
+                    <p class="text-secondary">
+                        Showing @FirstVisible–@LastVisible of
+                        @filteredSensors.Length matching sensors.
+                    </p>
+
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <caption>
+                                Warnings appear first, followed by stale sensors,
+                                sensors without data and normal sensors.
+                            </caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Device</th>
+                                    <th scope="col">Location</th>
+                                    <th scope="col">State</th>
+                                    <th scope="col">Latest value</th>
+                                    <th scope="col">Last reading (UTC)</th>
+                                    <th scope="col">Details</th>
+                                    <th scope="col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var sensor in VisibleSensors)
+                                {
+                                    <tr @key="sensor.SensorId">
+                                        <td>@sensor.DeviceIdentifier</td>
+                                        <td>@sensor.DeploymentLocation</td>
+                                        <td>
+                                            <span class="badge @StateClass(sensor.State)">
+                                                @sensor.State
+                                            </span>
+                                        </td>
+                                        <td>@sensor.LatestValue</td>
+                                        <td>
+                                            @(sensor.LastReadingAtUtc.HasValue
+                                                ? sensor.LastReadingAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                                                : "Never")
+                                        </td>
+                                        <td>@sensor.Message</td>
+                                        <td>
+                                            <a class="btn btn-sm btn-outline-primary"
+                                               href="@($"sensors/{sensor.SensorId}/telemetry")">
+                                                View telemetry
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <nav class="d-flex flex-wrap justify-content-between align-items-center gap-2"
+                         aria-label="Monitoring pages">
+                        <span>Page @currentPage of @PageCount</span>
+
+                        <div class="d-flex gap-2">
+                            <button type="button"
+                                    class="btn btn-outline-secondary"
+                                    disabled="@(currentPage == 1)"
+                                    @onclick="PreviousPage">
+                                Previous
+                            </button>
+                            <button type="button"
+                                    class="btn btn-outline-secondary"
+                                    disabled="@(currentPage == PageCount)"
+                                    @onclick="NextPage">
+                                Next
+                            </button>
+                        </div>
+                    </nav>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private const int PageSize = 25;
+
+    private readonly CancellationTokenSource lifetime = new();
+    private MonitoringSnapshot? snapshot;
+    private SensorMonitorStatus[] filteredSensors = [];
+    private Task? pollingTask;
+    private bool autoRefresh = true;
+    private bool isLoading;
+    private string? errorMessage;
+    private string searchText = string.Empty;
+    private string selectedState = string.Empty;
+    private int currentPage = 1;
+
+    private int PageCount => Math.Max(
+        1,
+        (filteredSensors.Length + PageSize - 1) / PageSize);
+
+    private int FirstVisible => (currentPage - 1) * PageSize + 1;
+
+    private int LastVisible => Math.Min(
+        currentPage * PageSize,
+        filteredSensors.Length);
+
+    private IEnumerable<SensorMonitorStatus> VisibleSensors =>
+        filteredSensors
+            .Skip((currentPage - 1) * PageSize)
+            .Take(PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSnapshotAsync();
+
+        if (!lifetime.IsCancellationRequested)
+        {
+            pollingTask = PollAsync();
+        }
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(lifetime.Token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (!autoRefresh || lifetime.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    await LoadSnapshotAsync();
+
+                    if (!lifetime.IsCancellationRequested)
+                    {
+                        StateHasChanged();
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task LoadSnapshotAsync()
+    {
+        if (isLoading || lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        isLoading = true;
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<MonitoringSnapshot>(
+                "api/monitoring",
+                lifetime.Token);
+
+            if (response is null || response.Sensors is null)
+            {
+                throw new System.Text.Json.JsonException(
+                    "The monitoring response is incomplete.");
+            }
+
+            snapshot = response;
+            errorMessage = null;
+            ApplyFilters();
+        }
+        catch (HttpRequestException)
+        {
+            errorMessage = "Could not refresh monitoring. Check the API connection. Any displayed statuses are from the last successful check.";
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            errorMessage = "Monitoring refresh timed out. Any displayed statuses are from the last successful check.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            errorMessage = "The API returned unreadable monitoring data. Any displayed statuses are from the last successful check.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void SelectState(string state)
+    {
+        selectedState = state;
+        FilterChanged();
+    }
+
+    private void FilterChanged()
+    {
+        currentPage = 1;
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        searchText = string.Empty;
+        selectedState = string.Empty;
+        FilterChanged();
+    }
+
+    private void ApplyFilters()
+    {
+        var search = searchText.Trim();
+
+        filteredSensors = snapshot?.Sensors
+            .Where(sensor =>
+                selectedState.Length == 0 ||
+                sensor.State == selectedState)
+            .Where(sensor =>
+                search.Length == 0 ||
+                sensor.DeviceIdentifier.Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase) ||
+                sensor.DeploymentLocation.Contains(
+                    search,
+                    StringComparison.OrdinalIgnoreCase))
+            .OrderBy(sensor => StatePriority(sensor.State))
+            .ThenBy(
+                sensor => sensor.DeviceIdentifier,
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+
+        currentPage = Math.Clamp(currentPage, 1, PageCount);
+    }
+
+    private void PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+        }
+    }
+
+    private void NextPage()
+    {
+        if (currentPage < PageCount)
+        {
+            currentPage++;
+        }
+    }
+
+    private static int StatePriority(string state)
+    {
+        return state switch
+        {
+            "Warning" => 0,
+            "Stale" => 1,
+            "No data" => 2,
+            _ => 3
+        };
+    }
+
+    private static string StateClass(string state)
+    {
+        return state switch
+        {
+            "Normal" => "text-bg-success",
+            "Warning" => "text-bg-danger",
+            "Stale" => "text-bg-warning",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        lifetime.Cancel();
+
+        if (pollingTask is not null)
+        {
+            await pollingTask;
+        }
+
+        lifetime.Dispose();
+    }
+}
