@@ -69,4 +69,64 @@ public sealed class TelemetryStore<T> where T : struct
             Readings = dailyReadings
         };
     }
+
+    public int AddBatch(
+    Guid sensorId,
+    TelemetryPacket<T>[][] batches)
+    {
+        ArgumentNullException.ThrowIfNull(batches);
+
+        var totalReadings = 0;
+
+        foreach (var batch in batches)
+        {
+            ArgumentNullException.ThrowIfNull(batch);
+            totalReadings = checked(totalReadings + batch.Length);
+        }
+
+        var incoming = new List<TelemetryPacket<T>>(totalReadings);
+
+        foreach (var batch in batches)
+        {
+            foreach (var packet in batch)
+            {
+                if (packet is null)
+                {
+                    throw new ArgumentException(
+                        "A telemetry batch cannot contain null packets.",
+                        nameof(batches));
+                }
+
+                if (packet.SensorId != sensorId)
+                {
+                    throw new ArgumentException(
+                        "Every packet must belong to the target sensor.",
+                        nameof(batches));
+                }
+
+                if (packet.RecordedAtUtc == default)
+                {
+                    throw new ArgumentException(
+                        "Every packet must have a recording timestamp.",
+                        nameof(batches));
+                }
+
+                incoming.Add(packet);
+            }
+        }
+
+        lock (syncRoot)
+        {
+            if (!readings.TryGetValue(sensorId, out var sensorReadings))
+            {
+                readings.Add(sensorId, incoming);
+            }
+            else
+            {
+                sensorReadings.AddRange(incoming);
+            }
+        }
+
+        return incoming.Count;
+    }
 }
