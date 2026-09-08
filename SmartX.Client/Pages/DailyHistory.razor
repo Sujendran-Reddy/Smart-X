@@ -1,0 +1,250 @@
+﻿@using System.Globalization
+@using SmartX.Shared.Models
+@inject HttpClient Http
+
+<section class="card mt-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h2 class="h5 mb-0">Daily telemetry history</h2>
+            <button type="button"
+                    class="btn btn-outline-primary"
+                    disabled="@isLoading"
+                    @onclick="LoadDailyHistoryAsync">
+                @(isLoading ? "Loading..." : "Refresh daily history")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-warning" role="alert">
+                @errorMessage
+            </div>
+        }
+
+        @if (isLoading)
+        {
+            <p role="status">Loading daily history...</p>
+        }
+        else if (days.Length == 0 && string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <p class="text-secondary mb-0">
+                No daily history yet. Submit a reading above.
+            </p>
+        }
+
+        @if (days.Length > 0)
+        {
+            <p class="text-secondary">
+                @days.Length recorded day(s)
+                · @days.Sum(day => day.Readings.Length) total readings
+            </p>
+
+            <div class="mb-3">
+                <label for="historyDate" class="form-label">
+                    Date (UTC)
+                </label>
+                <select id="historyDate"
+                        class="form-select"
+                        disabled="@isLoading"
+                        @bind="selectedDate">
+                    @foreach (var day in days)
+                    {
+                        <option value="@DateKey(day.Date)">
+                            @DateKey(day.Date) — @day.Readings.Length reading(s)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            @if (SelectedDay is { } selectedDay)
+            {
+                <p role="status">
+                    Showing @selectedDay.Readings.Length reading(s)
+                    for @DateKey(selectedDay.Date).
+                </p>
+
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <caption>Readings for the selected UTC date, newest first.</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Value</th>
+                                <th scope="col">Recorded (UTC)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var reading in selectedDay.Readings)
+                            {
+                                <tr>
+                                    <td>@reading.Value</td>
+                                    <td>@reading.RecordedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public Guid SensorId { get; set; }
+
+    [Parameter]
+    public TelemetryDataType DataType { get; set; }
+
+    [Parameter]
+    public int RefreshVersion { get; set; }
+
+    private DailyRow[] days = [];
+    private string selectedDate = string.Empty;
+    private string? errorMessage;
+    private bool isLoading;
+    private Guid? loadedSensorId;
+    private TelemetryDataType? loadedDataType;
+    private int loadedRefreshVersion = -1;
+    private int requestVersion;
+
+    private DailyRow? SelectedDay => days.FirstOrDefault(
+        day => DateKey(day.Date) == selectedDate);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var sensorChanged =
+            loadedSensorId != SensorId ||
+            loadedDataType != DataType;
+
+        if (!sensorChanged && loadedRefreshVersion == RefreshVersion)
+        {
+            return;
+        }
+
+        loadedSensorId = SensorId;
+        loadedDataType = DataType;
+        loadedRefreshVersion = RefreshVersion;
+
+        if (sensorChanged)
+        {
+            days = [];
+            selectedDate = string.Empty;
+        }
+
+        await LoadDailyHistoryAsync();
+    }
+
+    private async Task LoadDailyHistoryAsync()
+    {
+        var currentRequest = ++requestVersion;
+        var currentSensorId = SensorId;
+        var currentDataType = DataType;
+
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = currentDataType switch
+            {
+                TelemetryDataType.Float =>
+                    await ReadDailyHistoryAsync<float>(currentSensorId, "float"),
+                TelemetryDataType.Integer =>
+                    await ReadDailyHistoryAsync<int>(currentSensorId, "integer"),
+                TelemetryDataType.Boolean =>
+                    await ReadDailyHistoryAsync<bool>(currentSensorId, "boolean"),
+                _ => throw new System.Text.Json.JsonException(
+                    "Unsupported telemetry data type.")
+            };
+
+            if (currentRequest != requestVersion)
+            {
+                return;
+            }
+
+            days = result;
+
+            if (!days.Any(day => DateKey(day.Date) == selectedDate))
+            {
+                selectedDate = days.Length > 0
+                    ? DateKey(days[0].Date)
+                    : string.Empty;
+            }
+        }
+        catch (HttpRequestException exception)
+        {
+            if (currentRequest == requestVersion)
+            {
+                errorMessage = exception.StatusCode == System.Net.HttpStatusCode.NotFound
+                    ? "This sensor no longer exists. Return to the sensor list and refresh it."
+                    : "Could not refresh daily history. Check the API connection. Any displayed readings may be out of date.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (currentRequest == requestVersion)
+            {
+                errorMessage = "Loading daily history timed out. Try refreshing again.";
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            if (currentRequest == requestVersion)
+            {
+                errorMessage = "The API returned unreadable daily history.";
+            }
+        }
+        finally
+        {
+            if (currentRequest == requestVersion)
+            {
+                isLoading = false;
+            }
+        }
+    }
+
+    private async Task<DailyRow[]> ReadDailyHistoryAsync<T>(
+        Guid sensorId,
+        string route) where T : struct
+    {
+        var result = await Http.GetFromJsonAsync<DailyTelemetryHistory<T>>(
+            $"api/sensors/{sensorId}/telemetry/{route}/daily");
+
+        if (result is null ||
+            result.Dates is null ||
+            result.Readings is null ||
+            result.Dates.Length != result.Readings.Length ||
+            result.Readings.Any(row => row is null))
+        {
+            throw new System.Text.Json.JsonException(
+                "Daily history contains invalid date or reading arrays.");
+        }
+
+        return result.Dates
+            .Select((date, index) => new DailyRow(
+                date,
+                result.Readings[index]
+                    .OrderByDescending(packet => packet.RecordedAtUtc)
+                    .Select(packet => new ReadingRow(
+                        Convert.ToString(
+                            packet.Value,
+                            CultureInfo.InvariantCulture) ?? string.Empty,
+                        packet.RecordedAtUtc))
+                    .ToArray()))
+            .OrderByDescending(day => day.Date)
+            .ToArray();
+    }
+
+    private static string DateKey(DateOnly date)
+    {
+        return date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    private sealed record DailyRow(
+        DateOnly Date,
+        ReadingRow[] Readings);
+
+    private sealed record ReadingRow(
+        string Value,
+        DateTimeOffset RecordedAtUtc);
+}
