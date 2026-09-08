@@ -139,8 +139,7 @@
                                 <th scope="col">Category</th>
                                 <th scope="col">Data type</th>
                                 <th scope="col">Registered (UTC)</th>
-                                <th scope="col">Telemetry</th>
-                            </tr>
+<th scope="col">Actions</th>                            </tr>
                         </thead>
                         <tbody>
                             @foreach (var sensor in sensors)
@@ -152,11 +151,17 @@
                                     <td>@sensor.DataType</td>
                                     <td>@sensor.RegisteredAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td>
-                                        <a class="btn btn-sm btn-outline-primary"
-                                           href="@($"sensors/{sensor.Id}/telemetry")">
-                                            View telemetry
-                                        </a>
-                                    </td>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-outline-primary"
+           href="@($"sensors/{sensor.Id}/telemetry")">
+            View telemetry
+        </a>
+        <a class="btn btn-sm btn-outline-secondary"
+           href="@($"sensors/{sensor.Id}/attachments")">
+            Attachments
+        </a>
+    </div>
+</td>
                                 </tr>
                             }
                         </tbody>
