@@ -5,6 +5,8 @@ namespace SmartX.Api.Services;
 public sealed class TelemetryStore<T> where T : struct
 {
     private readonly Dictionary<Guid, List<TelemetryPacket<T>>> readings = new();
+    
+    // cache the latest packet so monitoring does not scan every sensors full history
     private readonly Dictionary<Guid, TelemetryPacket<T>> latestReadings = new();
     private readonly object syncRoot = new();
 
@@ -45,7 +47,7 @@ public sealed class TelemetryStore<T> where T : struct
             ArgumentNullException.ThrowIfNull(batch);
             totalReadings = checked(totalReadings + batch.Length);
         }
-
+        // this validates the complete batch before changing the shared colleciton
         var incoming = new List<TelemetryPacket<T>>(totalReadings);
         TelemetryPacket<T>? newest = null;
 
@@ -116,6 +118,7 @@ public sealed class TelemetryStore<T> where T : struct
     {
         lock (syncRoot)
         {
+            // returns a snapshot so callers cannot modify the list
             return readings.TryGetValue(sensorId, out var sensorReadings)
                 ? sensorReadings.ToArray()
                 : [];
@@ -127,6 +130,7 @@ public sealed class TelemetryStore<T> where T : struct
         var snapshot = GetHistory(sensorId);
 
         var days = snapshot
+            // grouped by UTC date so the daily boudaries dont depend on the servers local timezone
             .GroupBy(packet => DateOnly.FromDateTime(
                 packet.RecordedAtUtc.UtcDateTime))
             .OrderBy(group => group.Key)

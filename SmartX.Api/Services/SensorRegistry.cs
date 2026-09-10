@@ -30,6 +30,8 @@ public sealed class SensorRegistry
 
     public SensorProfile? Register(RegisterSensorRequest request)
     {
+
+        // keeps the uniqueness check and insertion together so they cannt register the same identifier
         var deviceIdentifier = request.DeviceIdentifier.Trim();
 
         lock (syncRoot)

@@ -15,6 +15,7 @@ public sealed class DemoDataSeeder
     private readonly TelemetryStore<bool> booleanStore;
     private readonly object syncRoot = new();
 
+    //returns previous result to avoid adding demo data again
     private DemoSeedResult? completedResult;
 
     public DemoDataSeeder(
@@ -31,6 +32,7 @@ public sealed class DemoDataSeeder
 
     public DemoSeedResult Seed()
     {
+
         lock (syncRoot)
         {
             if (completedResult is not null)
@@ -136,6 +138,7 @@ public sealed class DemoDataSeeder
 
         for (var dayIndex = 0; dayIndex < DayCount; dayIndex++)
         {
+            // uses different numbers of readings each day to test the jagged arrays
             var readingCount = 20 + (sensorIndex + dayIndex) % 11;
             var dayStart = today.AddDays(dayIndex - DayCount);
 

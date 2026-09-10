@@ -30,7 +30,8 @@ public sealed class SensorAttachmentStore
             SizeBytes = content.LongLength,
             UploadedAtUtc = DateTimeOffset.UtcNow
         };
-
+        // tie the file protection to the sensor and attachment IDs
+        // Both IDs must match to decrupt the file
         var fileProtector = CreateFileProtector(
             sensorId,
             metadata.Id);

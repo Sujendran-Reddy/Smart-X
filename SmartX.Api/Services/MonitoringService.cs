@@ -5,6 +5,11 @@ namespace SmartX.Api.Services;
 
 public sealed class MonitoringService
 {
+
+    //Check for missing or old readings before checking warning limits.
+    // Old readings dont necessarily mean the sensor is disconnected
+    // Limits can be changed and are for the demo only
+ 
     private readonly SensorRegistry registry;
     private readonly TelemetryStore<float> floatStore;
     private readonly TelemetryStore<int> integerStore;
@@ -135,7 +140,7 @@ public sealed class MonitoringService
                         break;
                     }
             }
-
+          
             string state;
             string message;
 

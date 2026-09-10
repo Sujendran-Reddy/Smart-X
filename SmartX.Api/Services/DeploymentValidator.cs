@@ -4,6 +4,7 @@ namespace SmartX.Api.Services;
 
 public sealed class DeploymentValidator
 {
+    // limit the tree depth and number of nodes checked
     private const int MaxDepth = 64;
     private const int MaxNodes = 10000;
 
@@ -14,6 +15,7 @@ public sealed class DeploymentValidator
         this.registry = registry;
     }
 
+    // checks for reused nodes & duplicate sensor assignments seperately
     public DeploymentValidationResult Validate(DeploymentNode root)
     {
         var result = new DeploymentValidationResult();
@@ -78,6 +80,8 @@ public sealed class DeploymentValidator
             result.Errors.Add($"{path}: Children must be an array, even when empty.");
             return;
         }
+
+        // a sensor must be enabled along with all its parent nodes
 
         var effectivelyEnabled = ancestorsEnabled && node.IsEnabled;
 

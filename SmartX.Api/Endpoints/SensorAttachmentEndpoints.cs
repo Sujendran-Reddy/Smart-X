@@ -68,6 +68,7 @@ public static class SensorAttachmentEndpoints
                     detail: "Each attachment must be 5 MiB or smaller.",
                     statusCode: StatusCodes.Status413PayloadTooLarge);
             }
+            // remove any folder path from uploaded filename
 
             var fileName = Path.GetFileName(
                 file.FileName.Replace('\\', '/'));
@@ -99,7 +100,8 @@ public static class SensorAttachmentEndpoints
                 sensorId,
                 fileName,
                 buffer.ToArray());
-
+            // anti forgery check is disabled for uploads ...no cookie login
+            
             return Results.Created(
                 $"/api/sensors/{sensorId}/attachments/{attachment.Id}",
                 attachment);

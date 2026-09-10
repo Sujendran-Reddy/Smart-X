@@ -286,6 +286,7 @@
         {
             while (await timer.WaitForNextTickAsync(lifetime.Token))
             {
+                // uses invokeasync so the timer can safely update the componnet
                 await InvokeAsync(async () =>
                 {
                     if (!autoRefresh || lifetime.IsCancellationRequested)
@@ -434,7 +435,7 @@
             _ => "text-bg-secondary"
         };
     }
-
+    // stops polling and waits for it to finsih before cleaning up the component
     public async ValueTask DisposeAsync()
     {
         lifetime.Cancel();

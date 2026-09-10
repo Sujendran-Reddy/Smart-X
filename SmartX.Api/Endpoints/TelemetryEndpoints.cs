@@ -13,6 +13,7 @@ public static class TelemetryEndpoints
         MapTelemetryType<bool>(app, "boolean", TelemetryDataType.Boolean);
     }
 
+    // Shares the route setup while keeping request & storage typed for each reading type
     private static void MapTelemetryType<T>(
         WebApplication app,
         string route,

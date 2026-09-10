@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// these share the in-memory stores across request for this API process
 builder.Services.AddOpenApi();
 
 builder.Services.AddDataProtection()
@@ -14,6 +15,8 @@ builder.Services.AddSingleton<SensorRegistry>();
 
 builder.Services.AddSingleton<DeploymentValidator>();
 
+// JSON nesting includes child arrays, so it allows more levels
+// than the tree validators depth limit
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.MaxDepth = 256;
@@ -33,6 +36,7 @@ builder.Services.AddSingleton<MonitoringService>();
 
 builder.Services.AddCors(options =>
 {
+    // the browse client runs on a separate HTTPS during local dev
     options.AddPolicy("Dashboard", policy =>
     {
         policy.WithOrigins("https://localhost:7102")
@@ -101,7 +105,7 @@ app.MapGet(
         });
     });
 
-app.MapSensorEndpoints();
+app.MapSensorEndpoints(); 
 
 app.MapTelemetryEndpoints();
 
