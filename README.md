@@ -32,14 +32,14 @@ Smart-X is a simulated IoT gateway for registering sensors, submitting typed tel
 1. Clone the repo
 2. Open Powershell in the folder containing SmartX.slnx
 3. Trust the dev certificate, restore dependencies & build
-   dotnet dev-certs https --trust
-   dotnet restore SmartX.slnx"
-   dotnet build SmartX.slnx --no-restore
+   - dotnet dev-certs https --trust
+   - dotnet restore SmartX.slnx"
+   - dotnet build SmartX.slnx --no-restore
 4. Start the API
-   dotnet run --project SmartX.Api --launch-profile https
+   - dotnet run --project SmartX.Api --launch-profile https
 5. Leave that terminal running, open a new terminal
 6. Start the Client
-   dotnet run --project SmartX.Client --launch-profile https
+   - dotnet run --project SmartX.Client --launch-profile https
 7. Open https://localhost:7102 in your browser
 
 ### How to Run Visual Studio
