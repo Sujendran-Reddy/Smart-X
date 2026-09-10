@@ -64,14 +64,12 @@ Smart-X is a simulated IoT gateway for registering sensors, submitting typed tel
 
 
 ## Features
-- register sensors with a uique device identifier, deployment location, category and data type
-- submit and retrieve float, integer and Boolean telemetry, including valid 0 and false values
-- search sensors, filter by category and browse pages of 25 sensors.
-- ciew history grouped by UTC date using jagged arrays
-- upload and download sensor attachments up to 5 MiB. Supported extensions: JSON, XML, YAML, YML, TXT, CSV, LOG, JPG, JPEG, PNG and PDF
-- validate nested deployment trees recursively, including sensor registration, duplicate assignments and disabled ancestors. Validation limits are 64 levels and 10,000 visited nodes
-- generate 1,000 simulated sensors and 175,010 readings across seven historical days. Repeating a completed seed request returns the original result during the same API run
-- monitor Normal, Warning, Stale and No data states with automatic refresh every five seconds, manual refresh and status filters
+- Register sensors and search or filter sensor directory.
+- Submit typed telemetry and view daily reading history.
+- Validate nested deployment structures.
+- Upload and download protected sensor attachments.
+- Monitor sensor readings with automatic refresh and status warnings.
+- Generate demo data for testing.
 
 ## Demo
 1. Register an Environmental sensor with the Float data type.
