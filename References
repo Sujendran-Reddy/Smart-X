@@ -1,0 +1,29 @@
+## References
+
+BillWagner (n.d.-a) *Generic classes and methods*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/types/generics (Accessed: September 2026).
+
+BillWagner (n.d.-b) *Lock statement – synchronize thread access to a shared resource*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/lock (Accessed: September 2026).
+
+BillWagner (2023a) *Operator overloading – define unary, arithmetic, equality, and comparison operators – C#*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/operator-overloading (Accessed: September 2026).
+
+BillWagner (2023b) *Arrays – C#*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/arrays (Accessed: September 2026).
+
+BillWagner (2024) *The checked and unchecked statements – overflow-checking – C# reference*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/checked-and-unchecked (Accessed: September 2026).
+
+dotnet-bot (2026a) *HashSet<T> class (System.Collections.Generic)*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.hashset-1?view=net-10.0 (Accessed: September 2026).
+
+dotnet-bot (2026b) *PeriodicTimer class (System.Threading)*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/dotnet/api/system.threading.periodictimer?view=net-10.0 (Accessed: September 2026).
+
+guardrex (2025a) *ASP.NET Core Blazor file uploads*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/blazor/file-uploads?view=aspnetcore-10.0 (Accessed: September 2026).
+
+guardrex (2025b) *ASP.NET Core Blazor synchronization context*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/blazor/components/synchronization-context?view=aspnetcore-10.0 (Accessed: September 2026).
+
+guardrex (2025c) *ASP.NET Core Razor component disposal*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/blazor/components/component-disposal?view=aspnetcore-10.0 (Accessed: September 2026).
+
+tdykstra (2024a) *Consumer APIs overview for ASP.NET Core*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/consumer-apis/overview?view=aspnetcore-10.0 (Accessed: September 2026).
+
+tdykstra (2024b) *Upload files in ASP.NET Core*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/mvc/models/file-uploads?view=aspnetcore-10.0 (Accessed: September 2026).
+
+tdykstra (2026) *Enable cross-origin requests (CORS) in ASP.NET Core*. Microsoft Learn. Available at: https://learn.microsoft.com/en-us/aspnet/core/security/cors?view=aspnetcore-10.0 (Accessed: September 2026).
+
+
