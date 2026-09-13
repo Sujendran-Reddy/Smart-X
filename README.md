@@ -80,3 +80,6 @@ Smart-X is a simulated IoT gateway for registering sensors, submitting typed tel
 6. Stop submitting readings. After more than 120 seconds, refresh monitoring to see Stale.
 7. Upload a small TXT or PNG attachment and download it again.
 8. Load the demo dataset to try searching, pagination and multi-day history. Historical seed readings will appear Stale; submit a new reading to demonstrate a fresh status.
+
+## Youtube
+https://youtu.be/nanmlA89OEk?si=8S9GPO4PL3lNkro1 
