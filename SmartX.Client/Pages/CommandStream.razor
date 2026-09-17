@@ -1,14 +1,236 @@
 ﻿@page "/command-stream"
+@using SmartX.Shared.Models
+@using SmartX.Shared.Requests
+@inject HttpClient Http
 
 <PageTitle>Command Stream | Smart-X</PageTitle>
 
 <div class="container py-4">
     <h1>Real-Time Command Stream and History</h1>
-    <p class="text-secondary">
-        Monitor incoming telemetry, manage device commands and review suggested actions.
-    </p>
 
-    <div class="alert alert-info" role="status">
-        No stream data loaded yet.
-    </div>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert alert-info" role="status">
+            @message
+        </div>
+    }
+
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Device controls</h2>
+
+            <label for="device" class="form-label">Select a device</label>
+
+            <select id="device"
+                    class="form-select mb-3"
+                    disabled="@isBusy"
+                    @bind="selectedSensorId">
+                <option value="@Guid.Empty">Choose a device</option>
+
+                @foreach (var device in devices)
+                {
+                    <option value="@device.Id">
+                        @device.DeviceIdentifier
+                    </option>
+                }
+            </select>
+
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-success"
+                        disabled="@(isBusy || selectedSensorId == Guid.Empty)"
+                        @onclick="() => SendCommandAsync(true)">
+                    Turn on
+                </button>
+
+                <button class="btn btn-danger"
+                        disabled="@(isBusy || selectedSensorId == Guid.Empty)"
+                        @onclick="() => SendCommandAsync(false)">
+                    Turn off
+                </button>
+
+                <button class="btn btn-warning"
+                        disabled="@(isBusy || !CanUndo)"
+                        @onclick="UndoAsync">
+                    Undo last command
+                </button>
+
+                <button class="btn btn-outline-primary"
+                        disabled="@isBusy"
+                        @onclick="RefreshAsync">
+                    Refresh
+                </button>
+            </div>
+
+            <p class="text-secondary mt-3 mb-0">
+                Undo restores the latest command across all devices.
+            </p>
+        </div>
+    </section>
+
+    <h2 class="h5">Command history</h2>
+
+    @if (isBusy)
+    {
+        <p role="status">Updating...</p>
+    }
+
+    @if (history.Length == 0)
+    {
+        <p>No commands recorded yet.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Device</th>
+                        <th scope="col">Previous state</th>
+                        <th scope="col">New state</th>
+                        <th scope="col">Time (UTC)</th>
+                        <th scope="col">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var command in history)
+                    {
+                        <tr @key="command.Id">
+                            <td>@DeviceName(command.SensorId)</td>
+                            <td>@StateName(command.PreviousState)</td>
+                            <td>@StateName(command.RequestedState)</td>
+                            <td>
+                                @command.IssuedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                            </td>
+                            <td>
+                                @(command.UndoneAtUtc.HasValue ? "Undone" : "Applied")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 </div>
+
+@code {
+    private SensorProfile[] devices = [];
+    private DeviceCommand[] history = [];
+    private Guid selectedSensorId = Guid.Empty;
+    private bool isBusy;
+    private string? message;
+
+    private bool CanUndo =>
+        history.Any(command => command.UndoneAtUtc is null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private Task RefreshAsync()
+    {
+        return RunAsync(LoadAsync);
+    }
+
+    private async Task LoadAsync()
+    {
+        var sensors = await Http.GetFromJsonAsync<SensorProfile[]>(
+            "api/sensors") ?? [];
+
+        devices = sensors
+            .Where(sensor =>
+                sensor.Category == SensorCategory.Actuator &&
+                sensor.DataType == TelemetryDataType.Boolean)
+            .ToArray();
+
+        history = await Http.GetFromJsonAsync<DeviceCommand[]>(
+            "api/commands") ?? [];
+    }
+
+    private Task SendCommandAsync(bool state)
+    {
+        return RunAsync(async () =>
+        {
+            var request = new IssueCommandRequest
+            {
+                RequestedState = state
+            };
+
+            using var response = await Http.PostAsJsonAsync(
+                $"api/commands/{selectedSensorId}",
+                request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                message =
+                    "Command rejected. The device needs an initial reading and must be changing state.";
+                return;
+            }
+
+            await LoadAsync();
+            message = $"Device turned {StateName(state).ToLowerInvariant()}.";
+        });
+    }
+
+    private Task UndoAsync()
+    {
+        return RunAsync(async () =>
+        {
+            using var response = await Http.PostAsync(
+                "api/commands/undo",
+                null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                message = "Could not undo the command. Refresh the history.";
+                return;
+            }
+
+            await LoadAsync();
+            message = "Last command undone.";
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        isBusy = true;
+        message = null;
+
+        try
+        {
+            await action();
+        }
+        catch (HttpRequestException)
+        {
+            message = "Connection failed. Check the API and refresh before retrying.";
+        }
+        catch (OperationCanceledException)
+        {
+            message = "Request timed out. Refresh before retrying.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            message = "Could not read the API response.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private string DeviceName(Guid sensorId)
+    {
+        return devices.FirstOrDefault(device => device.Id == sensorId)
+            ?.DeviceIdentifier ?? sensorId.ToString();
+    }
+
+    private static string StateName(bool state)
+    {
+        return state ? "On" : "Off";
+    }
+}
