@@ -123,5 +123,6 @@ app.MapGet(
     {
         return Results.Ok(monitoring.GetSnapshot());
     });
+app.MapCommandEndpoints();
 
 app.Run();
