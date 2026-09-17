@@ -47,6 +47,19 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddSingleton<CommandService>();
 
+builder.Services.AddSingleton<TelemetryQueue<float>>();
+builder.Services.AddSingleton<TelemetryQueue<int>>();
+builder.Services.AddSingleton<TelemetryQueue<bool>>();
+
+builder.Services.AddHostedService<TelemetryQueue<float>>(
+    services => services.GetRequiredService<TelemetryQueue<float>>());
+
+builder.Services.AddHostedService<TelemetryQueue<int>>(
+    services => services.GetRequiredService<TelemetryQueue<int>>());
+
+builder.Services.AddHostedService<TelemetryQueue<bool>>(
+
+    services => services.GetRequiredService<TelemetryQueue<bool>>());
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
