@@ -45,6 +45,8 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton<CommandService>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
